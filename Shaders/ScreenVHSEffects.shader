@@ -4,6 +4,10 @@ Shader "com.vhs_screen_effect/ScreenVHSEffects"
     {
         _SplitAmount("Split Amount", Range(0, 0.01)) = 0.0015
         _Direction("Direction", Vector) = (1, 0, 0, 0)
+
+        _ScanlineIntensity("Scanline Intensity", Range(0, 1)) = 0.22
+        _ScanlineCount("Scanline Density", Range(120, 1200)) = 480
+        _ScanlineSpeed("Scanline Drift Speed", Range(0, 8)) = 1.1
     }
 
     SubShader
@@ -43,7 +47,14 @@ Shader "com.vhs_screen_effect/ScreenVHSEffects"
             CBUFFER_START(UnityPerMaterial)
                 float _SplitAmount;
                 float4 _Direction;
+
+                float _ScanlineIntensity;
+                float _ScanlineCount;
+                float _ScanlineSpeed;
             CBUFFER_END
+
+            // Set globally from script (Time.unscaledTime based).
+            float4 _UnscaledTimeParams;
 
             Varyings Vert(Attributes input)
             {
@@ -68,6 +79,8 @@ Shader "com.vhs_screen_effect/ScreenVHSEffects"
                     uv.y = 1.0 - uv.y;
                 #endif
 
+                float t = _UnscaledTimeParams.y;
+
                 float2 dir = _Direction.xy;
                 float dirLen = max(length(dir), 1e-5);
                 dir /= dirLen;
@@ -80,6 +93,10 @@ Shader "com.vhs_screen_effect/ScreenVHSEffects"
                 half r = SAMPLE_TEXTURE2D(_BlitTexture, sampler_BlitTexture, uvR).r;
                 half b = SAMPLE_TEXTURE2D(_BlitTexture, sampler_BlitTexture, uvB).b;
                 half3 col = half3(r, baseCol.g, b);
+
+                float scanWave = sin((uv.y * _ScanlineCount + t * _ScanlineSpeed) * 6.2831853);
+                float scanMask = 1.0 - ((scanWave * 0.5 + 0.5) * _ScanlineIntensity);
+                col *= scanMask;
 
                 return half4(saturate(col), baseCol.a);
             }
