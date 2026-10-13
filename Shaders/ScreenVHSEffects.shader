@@ -11,6 +11,9 @@ Shader "com.vhs_screen_effect/ScreenVHSEffects"
 
         _GlitchJitter("Glitch Jitter", Range(0, 0.02)) = 0.0018
         _GlitchSpeed("Glitch Speed", Range(0, 30)) = 8
+
+        _PosterizeLevels("Posterize Levels", Range(2, 64)) = 8
+        _PosterizeBlend("Posterize Blend", Range(0, 1)) = 1
     }
 
     SubShader
@@ -57,6 +60,9 @@ Shader "com.vhs_screen_effect/ScreenVHSEffects"
 
                 float _GlitchJitter;
                 float _GlitchSpeed;
+
+                float _PosterizeLevels;
+                float _PosterizeBlend;
             CBUFFER_END
 
             // Set globally from script (Time.unscaledTime based).
@@ -67,6 +73,13 @@ Shader "com.vhs_screen_effect/ScreenVHSEffects"
                 p = frac(p * float2(123.34, 345.45));
                 p += dot(p, p + 34.345);
                 return frac(p.x * p.y);
+            }
+
+            half3 Posterize(half3 c, float levels)
+            {
+                float l = max(2.0, levels);
+                float steps = l - 1.0;
+                return round(c * steps) / steps;
             }
 
             Varyings Vert(Attributes input)
@@ -122,6 +135,9 @@ Shader "com.vhs_screen_effect/ScreenVHSEffects"
                 float scanWave = sin((uv.y * _ScanlineCount + t * _ScanlineSpeed) * 6.2831853);
                 float scanMask = 1.0 - ((scanWave * 0.5 + 0.5) * _ScanlineIntensity);
                 col *= scanMask;
+
+                half3 posterized = Posterize(col, _PosterizeLevels);
+                col = lerp(col, posterized, _PosterizeBlend);
 
                 return half4(saturate(col), baseCol.a);
             }
