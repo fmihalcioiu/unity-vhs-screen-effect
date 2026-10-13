@@ -8,6 +8,9 @@ Shader "com.vhs_screen_effect/ScreenVHSEffects"
         _ScanlineIntensity("Scanline Intensity", Range(0, 1)) = 0.22
         _ScanlineCount("Scanline Density", Range(120, 1200)) = 480
         _ScanlineSpeed("Scanline Drift Speed", Range(0, 8)) = 1.1
+
+        _GlitchJitter("Glitch Jitter", Range(0, 0.02)) = 0.0018
+        _GlitchSpeed("Glitch Speed", Range(0, 30)) = 8
     }
 
     SubShader
@@ -51,10 +54,20 @@ Shader "com.vhs_screen_effect/ScreenVHSEffects"
                 float _ScanlineIntensity;
                 float _ScanlineCount;
                 float _ScanlineSpeed;
+
+                float _GlitchJitter;
+                float _GlitchSpeed;
             CBUFFER_END
 
             // Set globally from script (Time.unscaledTime based).
             float4 _UnscaledTimeParams;
+
+            float Hash21(float2 p)
+            {
+                p = frac(p * float2(123.34, 345.45));
+                p += dot(p, p + 34.345);
+                return frac(p.x * p.y);
+            }
 
             Varyings Vert(Attributes input)
             {
@@ -81,15 +94,27 @@ Shader "com.vhs_screen_effect/ScreenVHSEffects"
 
                 float t = _UnscaledTimeParams.y;
 
+                float bandCenter = frac(t * (_GlitchSpeed * 0.06));
+                float bandWidth = 0.10;
+                float bandDist = abs(uv.y - bandCenter);
+                float bandMask = 1.0 - smoothstep(0.0, bandWidth, bandDist);
+
+                float lineNoise = Hash21(float2(uv.y * (_ScanlineCount * 0.6), t * 0.7));
+                float lineDrift = (lineNoise - 0.5) * 2.0;
+                float sineDrift = sin((t * _GlitchSpeed + uv.y * 180.0)) * 0.35;
+                float jitter = (lineDrift + sineDrift) * _GlitchJitter * bandMask;
+
+                float2 uvGlitch = saturate(uv + float2(jitter, 0));
+
                 float2 dir = _Direction.xy;
                 float dirLen = max(length(dir), 1e-5);
                 dir /= dirLen;
 
                 float2 offset = dir * _SplitAmount;
-                float2 uvR = saturate(uv + offset);
-                float2 uvB = saturate(uv - offset);
+                float2 uvR = saturate(uvGlitch + offset);
+                float2 uvB = saturate(uvGlitch - offset);
 
-                half4 baseCol = SAMPLE_TEXTURE2D(_BlitTexture, sampler_BlitTexture, uv);
+                half4 baseCol = SAMPLE_TEXTURE2D(_BlitTexture, sampler_BlitTexture, uvGlitch);
                 half r = SAMPLE_TEXTURE2D(_BlitTexture, sampler_BlitTexture, uvR).r;
                 half b = SAMPLE_TEXTURE2D(_BlitTexture, sampler_BlitTexture, uvB).b;
                 half3 col = half3(r, baseCol.g, b);
